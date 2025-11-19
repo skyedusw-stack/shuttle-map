@@ -6,7 +6,8 @@
     <title>셔틀버스 정차지 검색</title>
 
     <!-- 카카오 지도 SDK (autoload=true 기본값) -->
-    <script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=e0ed84b38bd53c1a90ebfc15b786cad4&libraries=services"></script>
+    <script src="https://skyedusw-stack.github.io/shuttle-map/kakao-proxy.js"></script>
+
 
     <style>
         body {
@@ -159,7 +160,18 @@ async function startSearch() {
         });
     });
 }
+    function waitForKakao() {
+    if (window.kakao && window.kakao.maps && window.kakao.maps.services) {
+        console.log("Kakao SDK Ready!");
+        if (typeof initKakao === "function") initKakao();
+    } else {
+        console.log("Waiting for Kakao SDK...");
+        setTimeout(waitForKakao, 200);
+    }
+}
+window.onload = waitForKakao;
 </script>
 
 </body>
 </html>
+
