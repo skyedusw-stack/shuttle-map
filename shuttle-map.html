@@ -5,138 +5,161 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>셔틀버스 정차지 검색</title>
 
-    <!-- Kakao Maps API (반드시 autoload=false) -->
-    <script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=e0ed84b38bd53c1a90ebfc15b786cad4&libraries=services&autoload=false"></script>
+    <!-- 카카오 지도 SDK (autoload=true 기본값) -->
+    <script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=e0ed84b38bd53c1a90ebfc15b786cad4&libraries=services"></script>
 
     <style>
-        body { font-family: "Noto Sans KR", sans-serif; padding: 20px; }
-        #map { width: 100%; height: 400px; background: #eee; margin-top: 20px; }
-        #userAddress { width: 70%; padding:12px; font-size:16px; }
-        #searchBtn { padding:12px 18px; background:#172C8D; color:#fff; border:none; border-radius:6px; }
-        #result { margin-top:20px; }
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        #map {
+            width: 100%;
+            height: 400px;
+            margin-top: 20px;
+            border-radius: 12px;
+        }
+        #result h3 {
+            margin-top: 20px;
+            font-size: 18px;
+            font-weight: bold;
+        }
     </style>
 </head>
+
 <body>
 
-    <h2>셔틀버스 정차지 검색</h2>
+<h2>🚍 셔틀버스 정차지 검색</h2>
 
-    <input id="userAddress" type="text" placeholder="주소를 입력하세요">
-    <button id="searchBtn" onclick="searchAddress()">검색</button>
+<input id="userAddress" type="text" placeholder="주소를 입력하세요" style="width:80%; padding:10px;">
+<button onclick="startSearch()" style="padding:10px 20px;">검색</button>
 
-    <div id="map"></div>
-    <div id="result"></div>
+<div id="result"></div>
+<div id="map"></div>
 
-    <script>
-        let map, geocoder, userMarker, circle;
 
-        /** 카카오맵 초기화 함수 */
-        function initKakao() {
-            geocoder = new kakao.maps.services.Geocoder();
+<script>
+/* ----------------------
+   CSV 정류장 데이터 URL
+----------------------- */
+const CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRKhfocVUTUBOZugwcAROeWqHAZAGA-DzpoE-t8KE3Ahtje4qIvPWu31m5zPfRbU6P2D7Kfw31z03V2/pub?output=csv";
 
-            map = new kakao.maps.Map(document.getElementById("map"), {
-                center: new kakao.maps.LatLng(37.285, 127.01),
-                level: 6
-            });
-        }
+/* 주소 → 좌표 변환 함수 */
+function getCoords(address) {
+    return new Promise((resolve, reject) => {
+        const geocoder = new kakao.maps.services.Geocoder();
 
-        /** 카카오 SDK 로드 완료 후 실행 */
-        kakao.maps.load(initKakao);
-
-        /** CSV 데이터 */
-        const CSV_URL =
-            "https://docs.google.com/spreadsheets/d/e/2PACX-1vRKhfocVUTUBOZugwcAROeWqHAZAGA-DzpoE-t8KE3Ahtje4qIvPWu31m5zPfRbU6P2D7Kfw31z03V2/pub?output=csv";
-
-        /** CSV 불러오기 */
-        async function loadStops() {
-            const res = await fetch(CSV_URL);
-            const text = await res.text();
-            return text.trim().split("\n").slice(1).map(r => {
-                const [address, name] = r.split(",");
-                return { address: address.trim(), name: name.trim() };
-            });
-        }
-
-        /** 주소 → 좌표 */
-        function getCoords(address) {
-            return new Promise((resolve) => {
-                geocoder.addressSearch(address, function(result, status){
-                    if (status === kakao.maps.services.Status.OK) {
-                        resolve({
-                            lat: parseFloat(result[0].y),
-                            lng: parseFloat(result[0].x)
-                        });
-                    } else resolve(null);
+        geocoder.addressSearch(address, function(result, status) {
+            if (status === kakao.maps.services.Status.OK) {
+                resolve({
+                    lat: result[0].y,
+                    lng: result[0].x
                 });
-            });
-        }
-
-        /** 거리 계산 */
-        function getDistance(lat1, lng1, lat2, lng2) {
-            const R = 6371;
-            const dLat = (lat2 - lat1) * Math.PI/180;
-            const dLng = (lng2 - lng1) * Math.PI/180;
-
-            const a =
-                Math.sin(dLat/2)**2 +
-                Math.cos(lat1*Math.PI/180) *
-                Math.cos(lat2*Math.PI/180) *
-                Math.sin(dLng/2)**2;
-
-            return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-        }
-
-        /** 검색 실행 */
-        async function searchAddress() {
-            const input = document.getElementById("userAddress").value.trim();
-            if (!input) return alert("주소를 입력해주세요.");
-
-            const userPos = await getCoords(input);
-            if (!userPos) return alert("주소를 찾을 수 없습니다.");
-
-            const userLatLng = new kakao.maps.LatLng(userPos.lat, userPos.lng);
-            map.setCenter(userLatLng);
-
-            if (userMarker) userMarker.setMap(null);
-            userMarker = new kakao.maps.Marker({
-                position: userLatLng, map: map
-            });
-
-            if (circle) circle.setMap(null);
-            circle = new kakao.maps.Circle({
-                center: userLatLng,
-                radius: 5000,
-                strokeWeight: 2,
-                strokeColor: "#172C8D",
-                fillColor: "#A3B8FF",
-                fillOpacity: 0.2
-            });
-            circle.setMap(map);
-
-            const stops = await loadStops();
-            let resultHTML = "<h3>5km 내 정차지 목록</h3>";
-            let found = 0;
-
-            for (const stop of stops) {
-                const coords = await getCoords(stop.address);
-                if (!coords) continue;
-
-                const dist = getDistance(userPos.lat, userPos.lng, coords.lat, coords.lng);
-
-                if (dist <= 5) {
-                    found++;
-                    new kakao.maps.Marker({
-                        position: new kakao.maps.LatLng(coords.lat, coords.lng),
-                        map: map
-                    });
-                    resultHTML += `• ${stop.address} (${dist.toFixed(2)} km)<br>`;
-                }
+            } else {
+                reject("주소 변환 실패");
             }
+        });
+    });
+}
 
-            if (found === 0) resultHTML = "<h3>5km 내 정차지가 없습니다.</h3>";
-            document.getElementById("result").innerHTML = resultHTML;
-        }
+/* 두 좌표 사이 거리 계산 (km 단위) */
+function distance(lat1, lng1, lat2, lng2) {
+    const R = 6371;
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLng = (lng2 - lng1) * Math.PI / 180;
 
-    </script>
+    const a = Math.sin(dLat/2) ** 2 +
+              Math.cos(lat1 * Math.PI/180) *
+              Math.cos(lat2 * Math.PI/180) *
+              Math.sin(dLng/2) ** 2;
+
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+/* ----------------------
+   검색 실행 함수
+----------------------- */
+async function startSearch() {
+    const userAddress = document.getElementById("userAddress").value.trim();
+    if (!userAddress) return alert("주소를 입력해주세요.");
+
+    document.getElementById("result").innerHTML = "<h3>검색 중...</h3>";
+
+    // 1) 사용자 주소 좌표 변환
+    let userCoords;
+    try {
+        userCoords = await getCoords(userAddress);
+    } catch (e) {
+        document.getElementById("result").innerHTML = "<h3>❌ 주소 검색 실패</h3>";
+        return;
+    }
+
+    // 2) CSV 불러오기
+    const res = await fetch(CSV_URL);
+    const text = await res.text();
+    const rows = text.trim().split("\n");
+
+    const parsedStops = rows.map(r => {
+        const [address, name] = r.split(",");
+        return { address: address.trim(), name: name.trim() };
+    });
+
+    let foundList = [];
+
+    // 3) 모든 정류장 거리 계산
+    for (let stop of parsedStops) {
+        try {
+            const coords = await getCoords(stop.address);
+            const km = distance(userCoords.lat, userCoords.lng, coords.lat, coords.lng);
+
+            if (km <= 5) {  // 🔥 반경 5km
+                foundList.push({
+                    name: stop.name,
+                    address: stop.address,
+                    dist: km,
+                    lat: coords.lat,
+                    lng: coords.lng
+                });
+            }
+        } catch (e) {}
+    }
+
+    // 4) 결과 정렬 (가까운 순)
+    foundList.sort((a, b) => a.dist - b.dist);
+
+    if (foundList.length === 0) {
+        document.getElementById("result").innerHTML = "<h3>❌ 5km 이내 정류장이 없습니다.</h3>";
+        return;
+    }
+
+    let html = "<h3>📍 5km 이내 정류장</h3>";
+    foundList.forEach(s => {
+        html += `<p><b>${s.name}</b><br>${s.address}<br>거리: ${s.dist.toFixed(2)} km</p>`;
+    });
+
+    document.getElementById("result").innerHTML = html;
+
+    // 5) 지도 표시
+    const map = new kakao.maps.Map(document.getElementById("map"), {
+        center: new kakao.maps.LatLng(userCoords.lat, userCoords.lng),
+        level: 5
+    });
+
+    // 사용자 위치 마커
+    new kakao.maps.Marker({
+        map,
+        position: new kakao.maps.LatLng(userCoords.lat, userCoords.lng)
+    });
+
+    // 정류장 마커
+    foundList.forEach(s => {
+        new kakao.maps.Marker({
+            map,
+            position: new kakao.maps.LatLng(s.lat, s.lng)
+        });
+    });
+}
+</script>
 
 </body>
 </html>
